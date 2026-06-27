@@ -1,0 +1,33 @@
+{
+  "daily": [
+    {
+      "date": "2026-06-21",
+      "agent": "Claude",
+      "inputTokens": 1000,
+      "outputTokens": 400,
+      "cacheReadTokens": 100,
+      "cacheCreationTokens": 50,
+      "costUSD": 0.04,
+      "model": "claude-sonnet-4"
+    },
+    {
+      "date": "2026-06-27",
+      "agent": "Claude",
+      "inputTokens": 42000,
+      "outputTokens": 6800,
+      "cacheReadTokens": 18500,
+      "cacheCreationTokens": 2100,
+      "costUSD": 0.72,
+      "model": "claude-sonnet-4"
+    },
+    {
+      "date": "2026-06-27",
+      "agent": "Codex",
+      "input_tokens": 12000,
+      "output_tokens": 2200,
+      "reasoning_output_tokens": 900,
+      "total_cost": 0.31,
+      "model": "gpt-5-codex"
+    }
+  ]
+}

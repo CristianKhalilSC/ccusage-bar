@@ -1,0 +1,5 @@
+{
+  "daily": [
+    {"date": "2026-06-26", "agent": "Claude", "inputTokens": 1000, "outputTokens": 500, "costUSD": 0.05}
+  ]
+}

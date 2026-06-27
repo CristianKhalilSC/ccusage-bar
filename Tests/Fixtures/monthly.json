@@ -1,0 +1,7 @@
+{
+  "monthly": [
+    {"date": "2026-06-01", "agent": "Claude", "inputTokens": 100, "outputTokens": 10, "costUSD": 0.01},
+    {"date": "2026-06-27", "agent": "Claude", "inputTokens": 42000, "outputTokens": 6800, "cacheReadTokens": 18500, "cacheCreationTokens": 2100, "costUSD": 0.72},
+    {"date": "2026-06-27", "agent": "Codex", "input_tokens": 12000, "output_tokens": 2200, "reasoning_tokens": 900, "cost": 0.31}
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "daily": [
+    {"agent": "Claude", "outputTokens": "not-a-number"},
+    {"date": "2026-06-27", "agent": "Claude"}
+  ]
+}
