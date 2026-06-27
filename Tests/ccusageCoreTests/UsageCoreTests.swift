@@ -11,6 +11,7 @@ struct UsageCoreTests {
         try tests.noUsageTodayProducesZeroToday()
         try tests.malformedFieldsDoNotCrashButMissingRecordsFail()
         try tests.agentOrderingPreservesSelectedAgent()
+        try tests.selectedAgentDefaultsAndEmptyState()
         try tests.resolverUsesPersistedPathThenPath()
         try await tests.serviceLoadsUsageThroughRunner()
         try tests.activeBlockParsing()
@@ -94,6 +95,23 @@ struct UsageCoreTests {
             AgentSelection.orderedAgents(detected: ["Cursor", "Codex"], selected: "Ghost") ==
             ["All", "Claude", "Codex", "Cursor", "Ghost"]
         )
+    }
+
+    func selectedAgentDefaultsAndEmptyState() throws {
+        let preferences = InMemoryUsagePreferences()
+        try expect(preferences.selectedAgent == "All")
+        preferences.selectedAgent = "Ghost"
+        try expect(preferences.selectedAgent == "Ghost")
+
+        let snapshot = try UsageNormalizer().normalize(
+            dailyData: fixture("unified-daily"),
+            monthlyData: fixture("monthly"),
+            selectedAgent: "Ghost",
+            now: date("2026-06-27")
+        )
+        try expect(snapshot.today.output == 0)
+        try expect(snapshot.selectedAgent == "Ghost")
+        try expect(AgentSelection.orderedAgents(detected: snapshot.detectedAgents, selected: "Ghost").contains("Ghost"))
     }
 
     func resolverUsesPersistedPathThenPath() throws {
