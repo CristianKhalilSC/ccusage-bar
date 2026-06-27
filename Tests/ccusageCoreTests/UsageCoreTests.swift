@@ -3,7 +3,7 @@ import ccusageCore
 
 @main
 struct UsageCoreTests {
-    static func main() throws {
+    static func main() async throws {
         let tests = UsageCoreTests()
         try tests.formatsTokenAndCostValues()
         try tests.normalizesUnifiedDailyAndMonthlyForAllAgents()
@@ -11,6 +11,8 @@ struct UsageCoreTests {
         try tests.noUsageTodayProducesZeroToday()
         try tests.malformedFieldsDoNotCrashButMissingRecordsFail()
         try tests.agentOrderingPreservesSelectedAgent()
+        try tests.resolverUsesPersistedPathThenPath()
+        try await tests.serviceLoadsUsageThroughRunner()
         try tests.activeBlockParsing()
         try tests.emptyActiveBlockParsing()
         print("ccusageCoreTests passed")
@@ -94,6 +96,52 @@ struct UsageCoreTests {
         )
     }
 
+    func resolverUsesPersistedPathThenPath() throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let executable = temporaryDirectory.appendingPathComponent("ccusage")
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+        let preferences = InMemoryUsagePreferences()
+        let resolver = CCUsageResolver(environment: ["PATH": temporaryDirectory.path])
+        let resolved = resolver.resolve(preferences: preferences)
+
+        try expect(resolved == executable.path)
+        try expect(preferences.resolvedCCUsagePath == executable.path)
+        try expect(resolver.resolve(preferences: preferences) == executable.path)
+    }
+
+    func serviceLoadsUsageThroughRunner() async throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let executable = temporaryDirectory.appendingPathComponent("ccusage")
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+        let preferences = InMemoryUsagePreferences(resolvedCCUsagePath: executable.path)
+        let runner = MockRunner(results: [
+            ["daily", "--json"]: fixture("unified-daily"),
+            ["monthly", "--json"]: fixture("monthly"),
+            ["blocks", "--active", "--json"]: Data(#"{"active":false}"#.utf8)
+        ])
+        let service = UsageService(
+            preferences: preferences,
+            resolver: CCUsageResolver(environment: [:]),
+            runner: runner
+        )
+
+        let result = try await service.load(selectedAgent: "All", now: date("2026-06-27"))
+        try expect(result.snapshot.today.output == 9_000)
+        try expect(result.activeBlock == nil)
+    }
+
     func activeBlockParsing() throws {
         let data = Data(#"{"active":true,"remaining_minutes":82,"burnRate":41.5,"projected_tokens":18400,"projected_cost":1.88}"#.utf8)
         let block = try ActiveBlockNormalizer.normalize(data)
@@ -135,5 +183,20 @@ struct TestFailure: Error, CustomStringConvertible {
 
     init(_ description: String) {
         self.description = description
+    }
+}
+
+final class MockRunner: CommandRunning, @unchecked Sendable {
+    let results: [[String]: Data]
+
+    init(results: [[String]: Data]) {
+        self.results = results
+    }
+
+    func run(executable: String, arguments: [String]) async throws -> CommandResult {
+        if let data = results[arguments] {
+            return CommandResult(stdout: data)
+        }
+        return CommandResult(stdout: Data(), stderr: Data("missing result".utf8), exitCode: 1)
     }
 }
