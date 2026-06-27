@@ -17,7 +17,7 @@ public struct UsageNormalizer: Sendable {
             throw UsageLoadError.unreadableOutput
         }
 
-        let detectedAgents = Array(Set((dailyRecords + monthlyRecords).map(\.agent))).sorted()
+        let detectedAgents = Array(Set((dailyRecords + monthlyRecords).map(\.agent).filter { $0 != UsageAgent.all.rawValue })).sorted()
         let todayKey = Self.dayFormatter.string(from: now)
         let weekKeys = Set(lastDays(count: 7, endingAt: now))
         let monthPrefix = String(todayKey.prefix(7))
@@ -102,7 +102,7 @@ public struct UsageNormalizer: Sendable {
             if !childRecords.isEmpty { return childRecords }
         }
 
-        guard let day = string(object, keys: ["date", "day", "startDate", "month"])?.prefix(10) else {
+        guard let day = string(object, keys: ["date", "day", "startDate", "month", "period"])?.prefix(10) else {
             return []
         }
 
@@ -141,6 +141,7 @@ public struct UsageNormalizer: Sendable {
 
     private func normalizedAgent(_ raw: String) -> String {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.caseInsensitiveCompare(UsageAgent.all.rawValue) == .orderedSame { return UsageAgent.all.rawValue }
         if value.localizedCaseInsensitiveContains("codex") { return UsageAgent.codex.rawValue }
         if value.localizedCaseInsensitiveContains("claude") { return UsageAgent.claude.rawValue }
         return value.isEmpty ? UsageAgent.claude.rawValue : value
@@ -173,7 +174,11 @@ public struct UsageNormalizer: Sendable {
 
     private func models(from object: [String: Any]) -> [String] {
         if let models = object["models"] as? [String] { return models }
+        if let models = object["modelsUsed"] as? [String] { return models }
         if let model = object["model"] as? String { return [model] }
+        if let breakdowns = object["modelBreakdowns"] as? [[String: Any]] {
+            return breakdowns.compactMap { $0["modelName"] as? String }
+        }
         return []
     }
 

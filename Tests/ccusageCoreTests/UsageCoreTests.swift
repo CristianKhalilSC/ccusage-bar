@@ -7,6 +7,7 @@ struct UsageCoreTests {
         let tests = UsageCoreTests()
         try tests.formatsTokenAndCostValues()
         try tests.normalizesUnifiedDailyAndMonthlyForAllAgents()
+        try tests.normalizesCurrentCCUsagePeriodShape()
         try tests.normalizesCodexReasoningTokens()
         try tests.noUsageTodayProducesZeroToday()
         try tests.malformedFieldsDoNotCrashButMissingRecordsFail()
@@ -43,6 +44,64 @@ struct UsageCoreTests {
         try expect(snapshot.weekDays.count == 7)
         try expect(snapshot.month.output == 9_010)
         try expect(snapshot.detectedAgents == ["Claude", "Codex"])
+    }
+
+    func normalizesCurrentCCUsagePeriodShape() throws {
+        let daily = Data(#"""
+        {
+          "daily": [
+            {
+              "agent": "all",
+              "period": "2026-06-27",
+              "inputTokens": 52694,
+              "outputTokens": 13570,
+              "cacheReadTokens": 222976,
+              "cacheCreationTokens": 0,
+              "totalCost": 0.2294395,
+              "modelsUsed": ["gpt-5"],
+              "modelBreakdowns": [
+                {
+                  "modelName": "gpt-5",
+                  "inputTokens": 52694,
+                  "outputTokens": 13570,
+                  "cacheReadTokens": 222976,
+                  "cacheCreationTokens": 0,
+                  "cost": 0.2294395
+                }
+              ]
+            }
+          ]
+        }
+        """#.utf8)
+
+        let monthly = Data(#"""
+        {
+          "monthly": [
+            {
+              "agent": "all",
+              "period": "2026-06",
+              "inputTokens": 55261,
+              "outputTokens": 14691,
+              "cacheReadTokens": 253952,
+              "cacheCreationTokens": 0,
+              "totalCost": 0.24773025,
+              "modelsUsed": ["gpt-5"]
+            }
+          ]
+        }
+        """#.utf8)
+
+        let snapshot = try UsageNormalizer().normalize(
+            dailyData: daily,
+            monthlyData: monthly,
+            selectedAgent: "All",
+            now: date("2026-06-27")
+        )
+
+        try expect(snapshot.today.output == 13_570)
+        try expect(snapshot.today.cacheRead == 222_976)
+        try expect(snapshot.today.models == ["gpt-5"])
+        try expect(snapshot.month.output == 14_691)
     }
 
     func normalizesCodexReasoningTokens() throws {
