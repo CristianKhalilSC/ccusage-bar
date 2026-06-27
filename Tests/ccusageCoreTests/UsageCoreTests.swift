@@ -14,6 +14,7 @@ struct UsageCoreTests {
         try tests.selectedAgentDefaultsAndEmptyState()
         try tests.resolverUsesPersistedPathThenPath()
         try await tests.serviceLoadsUsageThroughRunner()
+        try await tests.serviceSkipsActiveBlockForCodex()
         try tests.activeBlockParsing()
         try tests.emptyActiveBlockParsing()
         print("ccusageCoreTests passed")
@@ -160,6 +161,26 @@ struct UsageCoreTests {
         try expect(result.activeBlock == nil)
     }
 
+    func serviceSkipsActiveBlockForCodex() async throws {
+        let executable = try temporaryCCUsageExecutable()
+        let preferences = InMemoryUsagePreferences(resolvedCCUsagePath: executable.path)
+        let runner = MockRunner(results: [
+            ["daily", "--json"]: fixture("unified-daily"),
+            ["monthly", "--json"]: fixture("monthly")
+        ])
+        let service = UsageService(
+            preferences: preferences,
+            resolver: CCUsageResolver(environment: [:]),
+            runner: runner
+        )
+
+        let result = try await service.load(selectedAgent: "Codex", now: date("2026-06-27"))
+        try expect(result.snapshot.today.output == 2_200)
+        try expect(result.activeBlock == nil)
+        try expect(!runner.calls.contains(["blocks", "--active", "--json"]))
+        try? FileManager.default.removeItem(at: executable.deletingLastPathComponent())
+    }
+
     func activeBlockParsing() throws {
         let data = Data(#"{"active":true,"remaining_minutes":82,"burnRate":41.5,"projected_tokens":18400,"projected_cost":1.88}"#.utf8)
         let block = try ActiveBlockNormalizer.normalize(data)
@@ -186,6 +207,16 @@ struct UsageCoreTests {
         return formatter.date(from: value)!
     }
 
+    private func temporaryCCUsageExecutable() throws -> URL {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        let executable = temporaryDirectory.appendingPathComponent("ccusage")
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        return executable
+    }
+
     private func expect(
         _ condition: @autoclosure () -> Bool,
         _ message: String = "assertion failed",
@@ -206,12 +237,14 @@ struct TestFailure: Error, CustomStringConvertible {
 
 final class MockRunner: CommandRunning, @unchecked Sendable {
     let results: [[String]: Data]
+    private(set) var calls: [[String]] = []
 
     init(results: [[String]: Data]) {
         self.results = results
     }
 
     func run(executable: String, arguments: [String]) async throws -> CommandResult {
+        calls.append(arguments)
         if let data = results[arguments] {
             return CommandResult(stdout: data)
         }
