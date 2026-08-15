@@ -106,30 +106,23 @@ public struct UsageNormalizer: Sendable {
             return []
         }
 
-        let agent = normalizedAgent(string(object, keys: ["agent", "source", "tool", "provider", "app"]) ?? inferAgent(from: object))
-        var metrics = TokenMetrics(
-            input: int(object, keys: ["inputTokens", "input_tokens", "input"]),
-            output: int(object, keys: ["outputTokens", "output_tokens", "output"]),
-            cacheRead: int(object, keys: ["cacheReadTokens", "cache_read_tokens", "cacheRead", "cache_read"]),
-            cacheCreate: int(object, keys: ["cacheCreationTokens", "cacheCreateTokens", "cache_creation_tokens", "cacheCreate", "cache_creation"]),
-            reasoning: int(object, keys: ["reasoningTokens", "reasoning_tokens", "reasoningOutputTokens", "reasoning_output_tokens"]),
-            cost: decimal(object, keys: ["cost", "totalCost", "total_cost", "costUSD", "cost_usd"]),
-            models: models(from: object)
-        )
+        let rowAgent = normalizedAgent(string(object, keys: ["agent", "source", "tool", "provider", "app"]) ?? inferAgent(from: object))
+        let metadataAgents = metadataAgents(from: object)
+        let agent = agentForRecord(rowAgent: rowAgent, metadataAgents: metadataAgents)
+        var metrics = tokenMetrics(from: object)
 
         if let totals = object["totals"] as? [String: Any] {
-            metrics.add(TokenMetrics(
-                input: int(totals, keys: ["inputTokens", "input_tokens", "input"]),
-                output: int(totals, keys: ["outputTokens", "output_tokens", "output"]),
-                cacheRead: int(totals, keys: ["cacheReadTokens", "cache_read_tokens", "cacheRead"]),
-                cacheCreate: int(totals, keys: ["cacheCreationTokens", "cacheCreateTokens", "cache_creation_tokens", "cacheCreate"]),
-                reasoning: int(totals, keys: ["reasoningTokens", "reasoning_tokens", "reasoningOutputTokens"]),
-                cost: decimal(totals, keys: ["cost", "totalCost", "total_cost", "costUSD"]),
-                models: models(from: totals)
-            ))
+            metrics.add(tokenMetrics(from: totals))
         }
 
         return [UsageRecord(day: String(day), agent: agent, metrics: metrics)]
+    }
+
+    private func agentForRecord(rowAgent: String, metadataAgents: [String]) -> String {
+        guard rowAgent == UsageAgent.all.rawValue, metadataAgents.count == 1 else {
+            return rowAgent
+        }
+        return metadataAgents[0]
     }
 
     private func inferAgent(from object: [String: Any]) -> String {
@@ -145,6 +138,20 @@ public struct UsageNormalizer: Sendable {
         if value.localizedCaseInsensitiveContains("codex") { return UsageAgent.codex.rawValue }
         if value.localizedCaseInsensitiveContains("claude") { return UsageAgent.claude.rawValue }
         return value.isEmpty ? UsageAgent.claude.rawValue : value
+    }
+
+    private func metadataAgents(from object: [String: Any]) -> [String] {
+        guard let metadata = object["metadata"] as? [String: Any] else { return [] }
+        let values: [String]
+        if let agents = metadata["agents"] as? [String] {
+            values = agents
+        } else if let agent = metadata["agent"] as? String {
+            values = [agent]
+        } else {
+            values = []
+        }
+
+        return Array(Set(values.map(normalizedAgent).filter { $0 != UsageAgent.all.rawValue })).sorted()
     }
 
     private func string(_ object: [String: Any], keys: [String]) -> String? {
@@ -170,6 +177,60 @@ public struct UsageNormalizer: Sendable {
             if let string = object[key] as? String, let decimal = Decimal(string: string) { return decimal }
         }
         return 0
+    }
+
+    private func tokenMetrics(from object: [String: Any]) -> TokenMetrics {
+        let input = int(object, keys: ["inputTokens", "input_tokens", "input"])
+        let output = int(object, keys: ["outputTokens", "output_tokens", "output"])
+        let cacheRead = int(object, keys: ["cacheReadTokens", "cache_read_tokens", "cacheRead", "cache_read"])
+        let cacheCreate = int(object, keys: ["cacheCreationTokens", "cacheCreateTokens", "cache_creation_tokens", "cacheCreate", "cache_creation"])
+        let reasoning = int(object, keys: ["reasoningTokens", "reasoning_tokens", "reasoningOutputTokens", "reasoning_output_tokens"])
+        let cost = decimal(object, keys: ["cost", "totalCost", "total_cost", "costUSD", "cost_usd"])
+        let modelNames = models(from: object)
+        let fallbackTokens = input + output + cacheRead + cacheCreate + reasoning
+
+        return TokenMetrics(
+            input: input,
+            output: output,
+            cacheRead: cacheRead,
+            cacheCreate: cacheCreate,
+            reasoning: reasoning,
+            cost: cost,
+            models: modelNames,
+            modelUsage: modelUsage(
+                from: object,
+                fallbackNames: modelNames,
+                fallbackTokens: fallbackTokens,
+                fallbackCost: cost
+            )
+        )
+    }
+
+    private func modelUsage(
+        from object: [String: Any],
+        fallbackNames: [String],
+        fallbackTokens: Int,
+        fallbackCost: Decimal
+    ) -> [ModelUsage] {
+        if let breakdowns = object["modelBreakdowns"] as? [[String: Any]] {
+            let parsed = breakdowns.compactMap { breakdown -> ModelUsage? in
+                guard let name = string(breakdown, keys: ["modelName", "model", "name"]), !name.isEmpty else {
+                    return nil
+                }
+                let tokens =
+                    int(breakdown, keys: ["inputTokens", "input_tokens", "input"]) +
+                    int(breakdown, keys: ["outputTokens", "output_tokens", "output"]) +
+                    int(breakdown, keys: ["cacheReadTokens", "cache_read_tokens", "cacheRead", "cache_read"]) +
+                    int(breakdown, keys: ["cacheCreationTokens", "cacheCreateTokens", "cache_creation_tokens", "cacheCreate", "cache_creation"]) +
+                    int(breakdown, keys: ["reasoningTokens", "reasoning_tokens", "reasoningOutputTokens", "reasoning_output_tokens"])
+                let cost = decimal(breakdown, keys: ["cost", "totalCost", "total_cost", "costUSD", "cost_usd"])
+                return ModelUsage(name: name, tokens: tokens, cost: cost)
+            }
+            if !parsed.isEmpty { return parsed }
+        }
+
+        guard fallbackNames.count == 1 else { return [] }
+        return [ModelUsage(name: fallbackNames[0], tokens: fallbackTokens, cost: fallbackCost)]
     }
 
     private func models(from object: [String: Any]) -> [String] {

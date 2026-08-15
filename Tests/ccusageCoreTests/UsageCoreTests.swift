@@ -8,6 +8,8 @@ struct UsageCoreTests {
         try tests.formatsTokenAndCostValues()
         try tests.normalizesUnifiedDailyAndMonthlyForAllAgents()
         try tests.normalizesCurrentCCUsagePeriodShape()
+        try tests.normalizesMultipleModelBreakdowns()
+        try tests.normalizesCurrentCCUsageMetadataAgentShape()
         try tests.normalizesCodexReasoningTokens()
         try tests.noUsageTodayProducesZeroToday()
         try tests.malformedFieldsDoNotCrashButMissingRecordsFail()
@@ -41,6 +43,8 @@ struct UsageCoreTests {
         try expect(snapshot.today.output == 9_000)
         try expect(snapshot.today.reasoning == 900)
         try expect(snapshot.today.total == 84_500)
+        try expect(snapshot.today.modelUsage.map(\.name) == ["claude-sonnet-4", "gpt-5-codex"])
+        try expect(snapshot.today.modelUsage.map(\.tokens) == [69_400, 15_100])
         try expect(snapshot.weekDays.count == 7)
         try expect(snapshot.month.output == 9_010)
         try expect(snapshot.detectedAgents == ["Claude", "Codex"])
@@ -101,7 +105,99 @@ struct UsageCoreTests {
         try expect(snapshot.today.output == 13_570)
         try expect(snapshot.today.cacheRead == 222_976)
         try expect(snapshot.today.models == ["gpt-5"])
+        try expect(snapshot.today.modelUsage == [ModelUsage(name: "gpt-5", tokens: 289_240, cost: Decimal(string: "0.2294395")!)])
         try expect(snapshot.month.output == 14_691)
+    }
+
+    func normalizesMultipleModelBreakdowns() throws {
+        let daily = Data(#"""
+        {
+          "daily": [
+            {
+              "period": "2026-06-27",
+              "inputTokens": 100,
+              "outputTokens": 50,
+              "cacheReadTokens": 50,
+              "modelsUsed": ["model-a", "model-b"],
+              "modelBreakdowns": [
+                {"modelName": "model-a", "inputTokens": 60, "outputTokens": 20, "cost": 0.08},
+                {"modelName": "model-b", "inputTokens": 40, "outputTokens": 30, "cacheReadTokens": 50, "cost": 0.12}
+              ]
+            }
+          ]
+        }
+        """#.utf8)
+
+        let snapshot = try UsageNormalizer().normalize(
+            dailyData: daily,
+            monthlyData: nil,
+            selectedAgent: "All",
+            now: date("2026-06-27")
+        )
+
+        try expect(snapshot.today.modelUsage.map(\.name) == ["model-b", "model-a"])
+        try expect(snapshot.today.modelUsage.map(\.tokens) == [120, 80])
+        try expect(snapshot.today.modelUsage.reduce(0) { $0 + $1.tokens } == snapshot.today.total)
+    }
+
+    func normalizesCurrentCCUsageMetadataAgentShape() throws {
+        let daily = Data(#"""
+        {
+          "daily": [
+            {
+              "agent": "all",
+              "period": "2026-06-27",
+              "inputTokens": 52694,
+              "outputTokens": 13570,
+              "cacheReadTokens": 222976,
+              "cacheCreationTokens": 0,
+              "totalCost": 0.2294395,
+              "metadata": {
+                "agents": ["codex"]
+              },
+              "modelsUsed": ["gpt-5"]
+            }
+          ]
+        }
+        """#.utf8)
+
+        let monthly = Data(#"""
+        {
+          "monthly": [
+            {
+              "agent": "all",
+              "period": "2026-06",
+              "inputTokens": 55261,
+              "outputTokens": 14691,
+              "cacheReadTokens": 253952,
+              "cacheCreationTokens": 0,
+              "totalCost": 0.24773025,
+              "metadata": {
+                "agents": ["codex"]
+              },
+              "modelsUsed": ["gpt-5"]
+            }
+          ]
+        }
+        """#.utf8)
+
+        let codexSnapshot = try UsageNormalizer().normalize(
+            dailyData: daily,
+            monthlyData: monthly,
+            selectedAgent: "Codex",
+            now: date("2026-06-27")
+        )
+        try expect(codexSnapshot.today.output == 13_570)
+        try expect(codexSnapshot.month.output == 14_691)
+        try expect(codexSnapshot.detectedAgents == ["Codex"])
+
+        let claudeSnapshot = try UsageNormalizer().normalize(
+            dailyData: daily,
+            monthlyData: monthly,
+            selectedAgent: "Claude",
+            now: date("2026-06-27")
+        )
+        try expect(claudeSnapshot.today.output == 0)
     }
 
     func normalizesCodexReasoningTokens() throws {
