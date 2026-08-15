@@ -15,8 +15,8 @@ ccusage Bar keeps the numbers that matter in the macOS menu bar. Open its compac
 It reads local reports from [`ccusage`](https://github.com/ccusage/ccusage), supports unified and agent-specific views, and does not require an account or hosted service.
 
 <div align="center">
-  <img src="design/ccusage-bar-running.jpeg" width="390" alt="ccusage Bar running on macOS with daily token usage, estimated cost, token composition, model shares, and a weekly chart">
-  <p><sub>The app running on macOS with sample usage data.</sub></p>
+  <img src="design/ccusage-bar-running.png" width="482" alt="ccusage Bar running as a macOS menu bar popover with token usage, estimated cost, model shares, and a weekly chart">
+  <p><sub>Usage and cost in the menu bar, with the full dashboard one click away.</sub></p>
 </div>
 
 ## Highlights
