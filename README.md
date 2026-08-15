@@ -61,3 +61,6 @@ The initial implementation will use a Swift Package layout with the menu bar app
 
 More setup instructions will be added once the first runnable app scaffold lands.
 
+## License
+
+Licensed under the [MIT No Attribution License](LICENSE).
