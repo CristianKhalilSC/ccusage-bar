@@ -42,6 +42,7 @@ The app focuses on the useful daily signal:
 - Defensive JSON normalization across supported report shapes
 - Persisted selected agent
 - Manual and automatic refresh
+- Optional launch at login
 - Refresh-failure handling that preserves the last successful display
 - Unit tests for normalization, formatting, agent detection, and error handling
 
@@ -49,7 +50,6 @@ The app focuses on the useful daily signal:
 
 - App Store distribution
 - Settings window
-- Launch at login
 - Notifications
 - Budget alerts
 - Cloud sync

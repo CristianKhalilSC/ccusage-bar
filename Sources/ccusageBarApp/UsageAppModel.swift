@@ -15,6 +15,8 @@ final class UsageAppModel: ObservableObject {
     @Published var snapshot: UsageSnapshot?
     @Published var activeBlock: ActiveBlock?
     @Published var state: LoadState = .loading
+    @Published private(set) var launchAtLoginStatus: LaunchAtLoginStatus = .unavailable
+    @Published var launchAtLoginErrorMessage: String?
     @Published var selectedAgent: String {
         didSet {
             guard selectedAgent != oldValue else { return }
@@ -27,12 +29,18 @@ final class UsageAppModel: ObservableObject {
 
     private let logger = Logger(subsystem: "com.cristiancruz.ccusagebar", category: "refresh")
     private let preferences: UserDefaultsUsagePreferences
+    private let launchAtLoginService: any LaunchAtLoginServicing
     private var timer: Timer?
     private var refreshTask: Task<Void, Never>?
 
-    init(preferences: UserDefaultsUsagePreferences = UserDefaultsUsagePreferences()) {
+    init(
+        preferences: UserDefaultsUsagePreferences = UserDefaultsUsagePreferences(),
+        launchAtLoginService: any LaunchAtLoginServicing = SystemLaunchAtLoginService()
+    ) {
         self.preferences = preferences
+        self.launchAtLoginService = launchAtLoginService
         self.selectedAgent = preferences.selectedAgent
+        self.launchAtLoginStatus = launchAtLoginService.status
     }
 
     var menuTitle: String {
@@ -55,6 +63,18 @@ final class UsageAppModel: ObservableObject {
         case .failed:
             snapshot == nil ? "Unable to read ccusage output" : "Refresh failed"
         }
+    }
+
+    var launchAtLoginEnabled: Bool {
+        launchAtLoginStatus == .enabled || launchAtLoginStatus == .requiresApproval
+    }
+
+    var launchAtLoginAvailable: Bool {
+        launchAtLoginStatus != .unavailable
+    }
+
+    var launchAtLoginRequiresApproval: Bool {
+        launchAtLoginStatus == .requiresApproval
     }
 
     func start() {
@@ -99,6 +119,28 @@ final class UsageAppModel: ObservableObject {
                 state = .failed(error.localizedDescription)
             }
         }
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            try launchAtLoginService.setEnabled(enabled)
+        } catch {
+            logger.error("failed to update launch at login: \(error.localizedDescription, privacy: .public)")
+            launchAtLoginErrorMessage = error.localizedDescription
+        }
+        refreshLaunchAtLoginStatus()
+    }
+
+    func refreshLaunchAtLoginStatus() {
+        launchAtLoginStatus = launchAtLoginService.status
+    }
+
+    func openLoginItemsSettings() {
+        launchAtLoginService.openSystemSettings()
+    }
+
+    func dismissLaunchAtLoginError() {
+        launchAtLoginErrorMessage = nil
     }
 
     func quit() {
