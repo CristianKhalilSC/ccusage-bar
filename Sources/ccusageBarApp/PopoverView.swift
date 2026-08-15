@@ -41,6 +41,11 @@ struct PopoverView: View {
             guard height > 0 else { return }
             onContentHeightChange(height)
         }
+        .alert("Unable to Change Launch at Login", isPresented: launchAtLoginErrorPresented) {
+            Button("OK", action: model.dismissLaunchAtLoginError)
+        } message: {
+            Text(model.launchAtLoginErrorMessage ?? "The login item could not be updated.")
+        }
     }
 
     private var header: some View {
@@ -164,6 +169,7 @@ struct PopoverView: View {
             }
             .buttonStyle(FooterButtonStyle())
             .keyboardShortcut("r", modifiers: .command)
+            launchAtLoginMenu
             Button(action: model.quit) {
                 Image(systemName: "power")
                     .font(.system(size: 11, weight: .semibold))
@@ -179,6 +185,45 @@ struct PopoverView: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Brand.border.opacity(0.75)).frame(height: 1)
         }
+    }
+
+    private var launchAtLoginMenu: some View {
+        Menu {
+            Toggle("Launch at Login", isOn: launchAtLoginBinding)
+                .disabled(!model.launchAtLoginAvailable)
+            if model.launchAtLoginRequiresApproval {
+                Divider()
+                Button("Approve in System Settings...") {
+                    model.openLoginItemsSettings()
+                }
+            }
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Brand.secondaryText)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Settings")
+    }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { model.launchAtLoginEnabled },
+            set: { enabled in model.setLaunchAtLogin(enabled) }
+        )
+    }
+
+    private var launchAtLoginErrorPresented: Binding<Bool> {
+        Binding(
+            get: { model.launchAtLoginErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    model.dismissLaunchAtLoginError()
+                }
+            }
+        )
     }
 
     private var statusColor: Color {

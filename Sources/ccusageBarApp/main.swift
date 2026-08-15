@@ -58,6 +58,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
+    func applicationDidBecomeActive(_ notification: Notification) {
+        model?.refreshLaunchAtLoginStatus()
+    }
+
     @objc private func togglePopover() {
         guard let button = statusItem.button else { return }
         if popover.isShown {
