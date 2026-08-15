@@ -1,94 +1,200 @@
 import SwiftUI
 import ccusageCore
 
+private enum Brand {
+    static let yellow = Color(red: 238 / 255, green: 186 / 255, blue: 44 / 255)
+    static let canvas = Color(red: 8 / 255, green: 8 / 255, blue: 8 / 255)
+    static let surface = Color(red: 22 / 255, green: 22 / 255, blue: 22 / 255)
+    static let raisedSurface = Color(red: 28 / 255, green: 28 / 255, blue: 28 / 255)
+    static let border = Color(red: 38 / 255, green: 38 / 255, blue: 38 / 255)
+    static let secondaryText = Color.white.opacity(0.56)
+}
+
 struct PopoverView: View {
     @ObservedObject var model: UsageAppModel
     @State private var tab: UsageTab = .today
+    let onContentHeightChange: (CGFloat) -> Void
+
+    init(model: UsageAppModel, onContentHeightChange: @escaping (CGFloat) -> Void = { _ in }) {
+        self.model = model
+        self.onContentHeightChange = onContentHeightChange
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().overlay(Color.white.opacity(0.08))
             content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            Divider().overlay(Color.white.opacity(0.08))
+                .frame(maxWidth: .infinity, alignment: .top)
             footer
         }
-        .frame(width: 360, height: 520)
-        .background(Color(red: 0.06, green: 0.06, blue: 0.055))
+        .frame(width: 390)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(Brand.canvas)
         .foregroundStyle(.white)
+        .preferredColorScheme(.dark)
+        .background {
+            GeometryReader { geometry in
+                Color.clear.preference(key: PopoverHeightPreferenceKey.self, value: geometry.size.height)
+            }
+        }
+        .onPreferenceChange(PopoverHeightPreferenceKey.self) { height in
+            guard height > 0 else { return }
+            onContentHeightChange(height)
+        }
     }
 
     private var header: some View {
-        VStack(spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("ccusage Bar")
-                        .font(.headline)
-                    Text(model.freshnessText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+        VStack(spacing: 13) {
+            HStack(spacing: 12) {
+                Wordmark()
                 Spacer()
-                Picker("", selection: $model.selectedAgent) {
-                    ForEach(model.agentChoices, id: \.self) { agent in
-                        Text(agent).tag(agent)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(width: 128)
+                agentMenu
             }
 
-            Picker("", selection: $tab) {
-                ForEach(UsageTab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
+            HStack(spacing: 3) {
+                ForEach(UsageTab.allCases) { option in
+                    Button {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            tab = option
+                        }
+                    } label: {
+                        Text(option.rawValue)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(tab == option ? Brand.yellow : Brand.secondaryText)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 30)
+                            .contentShape(Rectangle())
+                            .background {
+                                if tab == option {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Brand.raisedSurface)
+                                        .overlay {
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .stroke(Brand.border, lineWidth: 1)
+                                        }
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .pickerStyle(.segmented)
+            .padding(3)
+            .background(Brand.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(Brand.border.opacity(0.8), lineWidth: 1)
+            }
         }
-        .padding(14)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
+    }
+
+    private var agentMenu: some View {
+        Menu {
+            Picker("Agent", selection: $model.selectedAgent) {
+                ForEach(model.agentChoices, id: \.self) { agent in
+                    Text(agent).tag(agent)
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(model.selectedAgent == UsageAgent.all.rawValue ? "All agents" : model.selectedAgent)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Brand.secondaryText)
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .textCase(.uppercase)
+            .padding(.horizontal, 11)
+            .frame(height: 30)
+            .background(Brand.raisedSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Brand.border, lineWidth: 1)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     @ViewBuilder private var content: some View {
         if model.state == .unavailable && model.snapshot == nil {
             UnavailableView(retry: model.refresh)
         } else if let snapshot = model.snapshot {
-            ScrollView {
-                VStack(spacing: 14) {
-                    if let activeBlock = model.activeBlock,
-                       AgentSelection.shouldFetchActiveBlock(selectedAgent: model.selectedAgent) {
-                        ActiveBlockStrip(block: activeBlock)
-                    }
-                    switch tab {
-                    case .today:
-                        TodayView(snapshot: snapshot)
-                    case .week:
-                        PeriodView(title: "Week", metrics: snapshot.week, days: snapshot.weekDays, includeDenseFallback: false)
-                    case .month:
-                        PeriodView(title: "Month", metrics: snapshot.month, days: snapshot.monthDays, includeDenseFallback: true)
-                    }
-                }
-                .padding(14)
-            }
+            DashboardView(
+                tab: tab,
+                snapshot: snapshot,
+                activeBlock: AgentSelection.shouldFetchActiveBlock(selectedAgent: model.selectedAgent)
+                    ? model.activeBlock
+                    : nil
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
         } else {
             VStack(spacing: 12) {
                 ProgressView()
-                Text("Loading")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .controlSize(.small)
+                    .tint(Brand.yellow)
+                Text("Reading usage")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Brand.secondaryText)
             }
+            .frame(maxWidth: .infinity)
+            .frame(height: 180)
         }
     }
 
     private var footer: some View {
-        HStack {
-            Button("Refresh", action: model.refresh)
-                .keyboardShortcut("r", modifiers: .command)
+        HStack(spacing: 10) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 7, height: 7)
+                .shadow(color: statusColor.opacity(0.35), radius: 4)
+            Text(model.freshnessText)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Brand.secondaryText)
             Spacer()
-            Button("Quit", action: model.quit)
-                .keyboardShortcut("q", modifiers: .command)
+            Button(action: model.refresh) {
+                Label("Refresh", systemImage: "arrow.clockwise")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Brand.yellow)
+            }
+            .buttonStyle(FooterButtonStyle())
+            .keyboardShortcut("r", modifiers: .command)
+            Button(action: model.quit) {
+                Image(systemName: "power")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Brand.secondaryText)
+            }
+            .buttonStyle(FooterButtonStyle())
+            .help("Quit ccusage Bar")
+            .keyboardShortcut("q", modifiers: .command)
         }
-        .padding(14)
+        .padding(.horizontal, 16)
+        .frame(height: 50)
+        .background(Brand.canvas)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Brand.border.opacity(0.75)).frame(height: 1)
+        }
+    }
+
+    private var statusColor: Color {
+        switch model.state {
+        case .loaded: Brand.yellow
+        case .loading: Brand.secondaryText
+        case .unavailable, .failed: Color.orange
+        }
+    }
+}
+
+private struct PopoverHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
@@ -99,200 +205,458 @@ enum UsageTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-struct TodayView: View {
+private struct Wordmark: View {
+    var body: some View {
+        HStack(alignment: .lastTextBaseline, spacing: 5) {
+            Text("ccusage")
+                .font(.system(size: 22, weight: .black, design: .rounded))
+                .tracking(-1.1)
+            Text("BAR")
+                .font(.system(size: 8, weight: .black, design: .rounded))
+                .tracking(0.5)
+                .foregroundStyle(Brand.yellow)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("ccusage Bar")
+    }
+}
+
+private struct DashboardView: View {
+    let tab: UsageTab
     let snapshot: UsageSnapshot
+    let activeBlock: ActiveBlock?
+
+    private var metrics: TokenMetrics {
+        switch tab {
+        case .today: snapshot.today
+        case .week: snapshot.week
+        case .month: snapshot.month
+        }
+    }
+
+    private var chartDays: [DailyUsage] {
+        switch tab {
+        case .today, .week: snapshot.weekDays
+        case .month: snapshot.monthDays
+        }
+    }
 
     var body: some View {
-        VStack(spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Today")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(UsageFormatters.cost(snapshot.today.cost))
-                        .font(.system(size: 30, weight: .semibold, design: .rounded))
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text("Total tokens")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(UsageFormatters.tokens(snapshot.today.total))
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
-                }
+        VStack(spacing: 10) {
+            HeroCard(period: tab.rawValue, metrics: metrics)
+            if let activeBlock {
+                ActiveBlockCard(block: activeBlock)
             }
-
-            MetricsRows(metrics: snapshot.today)
-            BarChart(days: snapshot.weekDays)
-            SummaryRow(title: "Month", metrics: snapshot.month)
+            TokenCompositionCard(metrics: metrics)
+            MetricTiles(metrics: metrics)
+            ModelUsageCard(metrics: metrics)
+            UsageChart(
+                title: tab == .month ? "This month" : "This week",
+                cost: tab == .month ? snapshot.month.cost : snapshot.week.cost,
+                days: chartDays
+            )
         }
+        .animation(.easeOut(duration: 0.18), value: tab)
     }
 }
 
-struct PeriodView: View {
-    let title: String
-    let metrics: TokenMetrics
-    let days: [DailyUsage]
-    let includeDenseFallback: Bool
-
-    var body: some View {
-        VStack(spacing: 14) {
-            SummaryRow(title: title, metrics: metrics)
-            if includeDenseFallback && days.count > 18 {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("High-usage days")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    ForEach(days.sorted { $0.metrics.output > $1.metrics.output }.prefix(6)) { day in
-                        HStack {
-                            Text(day.day)
-                            Spacer()
-                            Text(UsageFormatters.tokens(day.metrics.output))
-                                .foregroundStyle(.secondary)
-                        }
-                        .font(.caption)
-                    }
-                }
-            } else {
-                BarChart(days: days)
-            }
-            MetricsRows(metrics: metrics)
-        }
-    }
-}
-
-struct SummaryRow: View {
-    let title: String
+private struct HeroCard: View {
+    let period: String
     let metrics: TokenMetrics
 
     var body: some View {
-        HStack {
-            Text(title)
-                .font(.headline)
-            Spacer()
-            Text(UsageFormatters.cost(metrics.cost))
-                .font(.headline)
-                .foregroundStyle(Color(red: 1.0, green: 0.79, blue: 0.18))
-            Text(UsageFormatters.tokens(metrics.total))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        HStack(spacing: 0) {
+            HeroValue(value: UsageFormatters.cost(metrics.cost), label: period.uppercased(), accent: true)
+            Rectangle().fill(Brand.border).frame(width: 1, height: 52)
+            HeroValue(value: UsageFormatters.tokens(metrics.total), label: "TOTAL TOKENS", accent: false)
         }
+        .frame(height: 96)
+        .frame(maxWidth: .infinity)
+        .cardStyle()
     }
 }
 
-struct MetricsRows: View {
-    let metrics: TokenMetrics
-
-    var body: some View {
-        VStack(spacing: 7) {
-            MetricRow(label: "Input", value: UsageFormatters.tokens(metrics.input))
-            MetricRow(label: "Output", value: UsageFormatters.tokens(metrics.output))
-            MetricRow(label: "Cache read", value: UsageFormatters.tokens(metrics.cacheRead))
-            MetricRow(label: "Cache create", value: UsageFormatters.tokens(metrics.cacheCreate))
-            MetricRow(label: "Total tokens", value: UsageFormatters.tokens(metrics.total))
-            MetricRow(label: "Models", value: metrics.models.isEmpty ? "-" : metrics.models.joined(separator: ", "))
-            if metrics.reasoning > 0 {
-                MetricRow(label: "Reasoning", value: UsageFormatters.tokens(metrics.reasoning))
-            }
-        }
-    }
-}
-
-struct MetricRow: View {
-    let label: String
+private struct HeroValue: View {
     let value: String
+    let label: String
+    let accent: Bool
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 16)
+        VStack(spacing: 5) {
             Text(value)
-                .multilineTextAlignment(.trailing)
+                .font(.system(size: 29, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(accent ? Brand.yellow : Color.white)
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+            Text(label)
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(Brand.secondaryText)
         }
-        .font(.caption)
+        .frame(maxWidth: .infinity)
     }
 }
 
-struct BarChart: View {
-    let days: [DailyUsage]
-
-    var body: some View {
-        let maxOutput = max(days.map { $0.metrics.output }.max() ?? 0, 1)
-        HStack(alignment: .bottom, spacing: 5) {
-            ForEach(days) { day in
-                VStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color(red: 1.0, green: 0.79, blue: 0.18))
-                        .frame(height: max(3, CGFloat(day.metrics.output) / CGFloat(maxOutput) * 72))
-                    Text(String(day.day.suffix(2)))
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .frame(height: 92)
-    }
-}
-
-struct ActiveBlockStrip: View {
+private struct ActiveBlockCard: View {
     let block: ActiveBlock
 
+    private var stats: [(String, String)] {
+        var values: [(String, String)] = []
+        if let remaining = block.remainingMinutes { values.append(("Remaining", "\(remaining)m")) }
+        if let burn = block.burnRateTokensPerMinute { values.append(("Burn", "\(Int(burn))/m")) }
+        if let projected = block.projectedTokens { values.append(("Projected", UsageFormatters.tokens(projected))) }
+        if let cost = block.projectedCost { values.append(("Cost", UsageFormatters.cost(cost))) }
+        return values
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Active Claude block")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(Brand.yellow)
+            ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(stat.0)
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(Brand.secondaryText)
+                    Text(stat.1)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 48)
+        .background(Brand.yellow.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Brand.yellow.opacity(0.18), lineWidth: 1)
+        }
+    }
+}
+
+private struct TokenCompositionCard: View {
+    let metrics: TokenMetrics
+
+    private var segments: [TokenSegment] {
+        [
+            TokenSegment(label: "Input", value: metrics.input, color: Brand.yellow),
+            TokenSegment(label: "Output", value: metrics.output, color: Color.white.opacity(0.25)),
+            TokenSegment(label: "Cache read", value: metrics.cacheRead, color: Color.white.opacity(0.40)),
+            TokenSegment(label: "Cache create", value: metrics.cacheCreate, color: Color.white.opacity(0.62))
+        ]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
-                if let remaining = block.remainingMinutes {
-                    Stat(label: "Remaining", value: "\(remaining)m")
+                Text("Token composition")
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text("Total \(UsageFormatters.tokens(metrics.total))")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Brand.secondaryText)
+            }
+            GeometryReader { proxy in
+                HStack(spacing: 2) {
+                    ForEach(segments) { segment in
+                        segment.color.frame(width: segmentWidth(segment.value, available: proxy.size.width))
+                    }
+                    if metrics.reasoning > 0 {
+                        Color.white.opacity(0.8)
+                            .frame(width: segmentWidth(metrics.reasoning, available: proxy.size.width))
+                    }
                 }
-                if let burn = block.burnRateTokensPerMinute {
-                    Stat(label: "Burn", value: "\(Int(burn))/m")
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            }
+            .frame(height: 9)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), alignment: .leading, spacing: 7) {
+                ForEach(segments) { segment in
+                    CompositionLegend(segment: segment, total: metrics.total)
                 }
-                if let projected = block.projectedTokens {
-                    Stat(label: "Projected", value: UsageFormatters.tokens(projected))
+            }
+            if metrics.reasoning > 0 {
+                Text("Reasoning \(UsageFormatters.tokens(metrics.reasoning))")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(Brand.secondaryText)
+            }
+        }
+        .padding(12)
+        .cardStyle()
+    }
+
+    private func segmentWidth(_ value: Int, available: CGFloat) -> CGFloat {
+        guard metrics.total > 0 else { return 0 }
+        return max(value > 0 ? 2 : 0, available * CGFloat(value) / CGFloat(metrics.total))
+    }
+}
+
+private struct TokenSegment: Identifiable {
+    let label: String
+    let value: Int
+    let color: Color
+    var id: String { label }
+}
+
+private struct CompositionLegend: View {
+    let segment: TokenSegment
+    let total: Int
+
+    private var percentage: Int {
+        guard total > 0 else { return 0 }
+        return Int((Double(segment.value) / Double(total) * 100).rounded())
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(segment.color).frame(width: 6, height: 6)
+            Text(segment.label).foregroundStyle(Brand.secondaryText)
+            Spacer(minLength: 4)
+            Text("\(percentage)%").monospacedDigit()
+        }
+        .font(.system(size: 9, weight: .medium))
+    }
+}
+
+private struct MetricTiles: View {
+    let metrics: TokenMetrics
+
+    private var items: [MetricItem] {
+        [
+            MetricItem(label: "Input", value: metrics.input, icon: "arrow.up.right"),
+            MetricItem(label: "Output", value: metrics.output, icon: "arrow.down.to.line"),
+            MetricItem(label: "Cache read", value: metrics.cacheRead, icon: "line.3.horizontal"),
+            MetricItem(label: "Cache create", value: metrics.cacheCreate, icon: "plus.square")
+        ]
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(items) { item in
+                VStack(alignment: .leading, spacing: 5) {
+                    Image(systemName: item.icon)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Brand.yellow)
+                    Text(item.label)
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(Brand.secondaryText)
+                        .lineLimit(1)
+                    Text(UsageFormatters.tokens(item.value))
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.75)
+                        .lineLimit(1)
                 }
-                if let cost = block.projectedCost {
-                    Stat(label: "Cost", value: UsageFormatters.cost(cost))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(9)
+                .background(Brand.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Brand.border, lineWidth: 1)
                 }
             }
         }
-        .padding(10)
-        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
-struct Stat: View {
+private struct MetricItem: Identifiable {
     let label: String
-    let value: String
+    let value: Int
+    let icon: String
+    var id: String { label }
+}
+
+private struct ModelUsageCard: View {
+    let metrics: TokenMetrics
+
+    private var rows: [ModelUsage] {
+        if !metrics.modelUsage.isEmpty { return metrics.modelUsage }
+        return metrics.models.map { ModelUsage(name: $0) }
+    }
+
+    private var attributedTokens: Int {
+        rows.reduce(0) { $0 + $1.tokens }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.caption.weight(.semibold))
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 11) {
+                HStack {
+                    Text("Models")
+                        .font(.system(size: 12, weight: .semibold))
+                    Spacer()
+                    Text("Share of tokens")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Brand.secondaryText)
+                }
+
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, usage in
+                    VStack(spacing: 6) {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(modelColor(index))
+                                .frame(width: 6, height: 6)
+                            Text(usage.name)
+                                .font(.system(size: 10, weight: .medium))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 8)
+                            if usage.tokens > 0 {
+                                Text(UsageFormatters.tokens(usage.tokens))
+                                    .foregroundStyle(Brand.secondaryText)
+                                Text("\(percentage(for: usage))%")
+                                    .frame(width: 31, alignment: .trailing)
+                            } else {
+                                Text("Breakdown unavailable")
+                                    .foregroundStyle(Brand.secondaryText)
+                            }
+                        }
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+
+                        GeometryReader { proxy in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.white.opacity(0.07))
+                                Capsule()
+                                    .fill(modelColor(index))
+                                    .frame(width: barWidth(for: usage, available: proxy.size.width))
+                            }
+                        }
+                        .frame(height: 5)
+                    }
+                }
+            }
+            .padding(12)
+            .cardStyle()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func percentage(for usage: ModelUsage) -> Int {
+        guard attributedTokens > 0 else { return 0 }
+        return Int((Double(usage.tokens) / Double(attributedTokens) * 100).rounded())
+    }
+
+    private func barWidth(for usage: ModelUsage, available: CGFloat) -> CGFloat {
+        guard attributedTokens > 0 else { return 0 }
+        return available * CGFloat(usage.tokens) / CGFloat(attributedTokens)
+    }
+
+    private func modelColor(_ index: Int) -> Color {
+        switch index {
+        case 0: Brand.yellow
+        case 1: Color.white.opacity(0.62)
+        case 2: Color.white.opacity(0.40)
+        default: Color.white.opacity(0.24)
+        }
     }
 }
 
-struct UnavailableView: View {
-    let retry: () -> Void
+private struct UsageChart: View {
+    let title: String
+    let cost: Decimal
+    let days: [DailyUsage]
 
+    private var maxOutput: Int { max(days.map { $0.metrics.output }.max() ?? 0, 1) }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title).font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text(UsageFormatters.cost(cost))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Brand.yellow)
+            }
+            HStack(alignment: .bottom, spacing: days.count > 14 ? 2 : 8) {
+                ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
+                    VStack(spacing: 5) {
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(index == days.count - 1 ? Brand.yellow : Color.white.opacity(0.20))
+                            .frame(height: max(4, CGFloat(day.metrics.output) / CGFloat(maxOutput) * 52))
+                        Text(dayLabel(day.day, dense: days.count > 14))
+                            .font(.system(size: days.count > 14 ? 6.5 : 8, weight: .medium))
+                            .foregroundStyle(Brand.secondaryText)
+                            .minimumScaleFactor(0.7)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 70, alignment: .bottom)
+        }
+        .padding(12)
+        .cardStyle()
+    }
+
+    private func dayLabel(_ rawDay: String, dense: Bool) -> String {
+        guard let date = Self.inputFormatter.date(from: rawDay) else { return String(rawDay.suffix(2)) }
+        return (dense ? Self.dayNumberFormatter : Self.weekdayFormatter).string(from: date)
+    }
+
+    private static let inputFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+    private static let weekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE"
+        return formatter
+    }()
+    private static let dayNumberFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "d"
+        return formatter
+    }()
+}
+
+private struct FooterButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(
+                configuration.isPressed ? Color.white.opacity(0.09) : Brand.surface,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Brand.border, lineWidth: 1)
+            }
+    }
+}
+
+private extension View {
+    func cardStyle() -> some View {
+        background(Brand.surface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(Brand.border, lineWidth: 1)
+            }
+    }
+}
+
+private struct UnavailableView: View {
+    let retry: () -> Void
     var body: some View {
         VStack(spacing: 12) {
-            Text("ccusage unavailable")
-                .font(.headline)
-            Text("Install ccusage or check PATH")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Button("Retry", action: retry)
+            Image(systemName: "terminal")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(Brand.yellow)
+            Text("ccusage unavailable").font(.system(size: 14, weight: .semibold))
+            Text("Install ccusage or check your PATH, then retry.")
+                .font(.system(size: 11))
+                .foregroundStyle(Brand.secondaryText)
+            Button("Retry", action: retry).buttonStyle(FooterButtonStyle())
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
+        .frame(height: 180)
     }
 }
 

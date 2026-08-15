@@ -6,6 +6,24 @@ public enum UsageAgent: String, CaseIterable, Codable, Hashable {
     case codex = "Codex"
 }
 
+public struct ModelUsage: Codable, Equatable, Identifiable, Sendable {
+    public var id: String { name }
+    public var name: String
+    public var tokens: Int
+    public var cost: Decimal
+
+    public init(name: String, tokens: Int = 0, cost: Decimal = 0) {
+        self.name = name
+        self.tokens = tokens
+        self.cost = cost
+    }
+
+    public mutating func add(_ other: ModelUsage) {
+        tokens += other.tokens
+        cost += other.cost
+    }
+}
+
 public struct TokenMetrics: Codable, Equatable, Sendable {
     public var input: Int
     public var output: Int
@@ -14,6 +32,7 @@ public struct TokenMetrics: Codable, Equatable, Sendable {
     public var reasoning: Int
     public var cost: Decimal
     public var models: [String]
+    public var modelUsage: [ModelUsage]
 
     public init(
         input: Int = 0,
@@ -22,7 +41,8 @@ public struct TokenMetrics: Codable, Equatable, Sendable {
         cacheCreate: Int = 0,
         reasoning: Int = 0,
         cost: Decimal = 0,
-        models: [String] = []
+        models: [String] = [],
+        modelUsage: [ModelUsage] = []
     ) {
         self.input = input
         self.output = output
@@ -30,7 +50,17 @@ public struct TokenMetrics: Codable, Equatable, Sendable {
         self.cacheCreate = cacheCreate
         self.reasoning = reasoning
         self.cost = cost
-        self.models = Array(Set(models)).sorted()
+        let allModelNames = models + modelUsage.map(\.name)
+        self.models = Array(Set(allModelNames)).sorted()
+        self.modelUsage = Self.mergedModelUsage(modelUsage)
+
+        if self.modelUsage.isEmpty, self.models.count == 1 {
+            self.modelUsage = [ModelUsage(
+                name: self.models[0],
+                tokens: input + output + cacheRead + cacheCreate + reasoning,
+                cost: cost
+            )]
+        }
     }
 
     public var total: Int {
@@ -49,6 +79,23 @@ public struct TokenMetrics: Codable, Equatable, Sendable {
         reasoning += other.reasoning
         cost += other.cost
         models = Array(Set(models + other.models)).sorted()
+        modelUsage = Self.mergedModelUsage(modelUsage + other.modelUsage)
+    }
+
+    private static func mergedModelUsage(_ values: [ModelUsage]) -> [ModelUsage] {
+        var byName: [String: ModelUsage] = [:]
+        for value in values where !value.name.isEmpty {
+            if var existing = byName[value.name] {
+                existing.add(value)
+                byName[value.name] = existing
+            } else {
+                byName[value.name] = value
+            }
+        }
+        return byName.values.sorted {
+            if $0.tokens == $1.tokens { return $0.name < $1.name }
+            return $0.tokens > $1.tokens
+        }
     }
 }
 
