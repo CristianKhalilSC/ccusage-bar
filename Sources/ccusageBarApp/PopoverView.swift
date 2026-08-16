@@ -2,9 +2,6 @@ import SwiftUI
 import ccusageCore
 
 private enum Brand {
-    static let canvas = Color(red: 8 / 255, green: 8 / 255, blue: 8 / 255)
-    static let surface = Color(red: 22 / 255, green: 22 / 255, blue: 22 / 255)
-    static let raisedSurface = Color(red: 28 / 255, green: 28 / 255, blue: 28 / 255)
     static let border = Color(red: 38 / 255, green: 38 / 255, blue: 38 / 255)
     static let secondaryText = Color.white.opacity(0.56)
 }
@@ -28,7 +25,9 @@ struct PopoverView: View {
         }
         .frame(width: 390)
         .fixedSize(horizontal: false, vertical: true)
-        .background(Brand.canvas)
+        .background {
+            FrostedBackdrop(accentColor: model.accentColor)
+        }
         .foregroundStyle(.white)
         .tint(model.accentColor)
         .environment(\.appAccentColor, model.accentColor)
@@ -57,73 +56,75 @@ struct PopoverView: View {
                 agentMenu
             }
 
-            HStack(spacing: 3) {
-                ForEach(UsageTab.allCases) { option in
-                    Button {
-                        withAnimation(.easeOut(duration: 0.18)) {
-                            tab = option
-                        }
-                    } label: {
-                        Text(option.rawValue)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(tab == option ? model.accentColor : Brand.secondaryText)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 30)
-                            .contentShape(Rectangle())
-                            .background {
-                                if tab == option {
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(Brand.raisedSurface)
-                                        .overlay {
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .stroke(Brand.border, lineWidth: 1)
-                                        }
-                                }
-                            }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(3)
-            .background(Brand.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(Brand.border.opacity(0.8), lineWidth: 1)
-            }
+            tabSelector
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .padding(.bottom, 12)
     }
 
+    private var tabSelector: some View {
+        HStack(spacing: 7) {
+            ForEach(UsageTab.allCases) { option in
+                Button {
+                    withAnimation(.snappy(duration: 0.24)) {
+                        tab = option
+                    }
+                } label: {
+                    Text(option.rawValue)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(tab == option ? model.accentColor : Brand.secondaryText)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .frostedGlassSurface(
+                    cornerRadius: 16,
+                    tint: tab == option ? model.accentColor.opacity(0.17) : nil
+                )
+            }
+        }
+    }
+
     private var agentMenu: some View {
         Menu {
-            Picker("Agent", selection: $model.selectedAgent) {
-                ForEach(model.agentChoices, id: \.self) { agent in
-                    Text(agent).tag(agent)
+            ForEach(model.agentChoices, id: \.self) { agent in
+                Button {
+                    model.selectedAgent = agent
+                } label: {
+                    if model.selectedAgent == agent {
+                        Label(agentDisplayName(agent), systemImage: "checkmark")
+                    } else {
+                        Text(agentDisplayName(agent))
+                    }
                 }
             }
         } label: {
-            HStack(spacing: 8) {
-                Text(model.selectedAgent == UsageAgent.all.rawValue ? "All agents" : model.selectedAgent)
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(Brand.secondaryText)
-            }
-            .font(.system(size: 11, weight: .semibold))
-            .textCase(.uppercase)
-            .padding(.horizontal, 11)
-            .frame(height: 30)
-            .background(Brand.raisedSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Brand.border, lineWidth: 1)
-            }
+            agentMenuLabel
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+    }
+
+    private func agentDisplayName(_ agent: String) -> String {
+        agent == UsageAgent.all.rawValue ? "All agents" : agent
+    }
+
+    private var agentMenuLabel: some View {
+        HStack(spacing: 8) {
+            Text(agentDisplayName(model.selectedAgent))
+                .lineLimit(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Brand.secondaryText)
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .textCase(.uppercase)
+        .padding(.horizontal, 11)
+        .frame(height: 30)
+        .frostedGlassSurface(cornerRadius: 15, tint: model.accentColor.opacity(0.10))
     }
 
     @ViewBuilder private var content: some View {
@@ -163,29 +164,62 @@ struct PopoverView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Brand.secondaryText)
             Spacer()
+            footerActions
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 50)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.white.opacity(0.10))
+                .frame(height: 1)
+        }
+    }
+
+    @ViewBuilder private var footerActions: some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: 8) {
+                footerActionContent
+            }
+        } else {
+            footerActionContent
+        }
+    }
+
+    private var footerActionContent: some View {
+        HStack(spacing: 8) {
             Button(action: model.refresh) {
                 Label("Refresh", systemImage: "arrow.clockwise")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(model.accentColor)
             }
-            .buttonStyle(FooterButtonStyle())
+            .buttonStyle(FooterButtonStyle(tint: model.accentColor.opacity(0.13)))
             .keyboardShortcut("r", modifiers: .command)
+
+            footerSecondaryActions
+        }
+    }
+
+    private var footerSecondaryActions: some View {
+        HStack(spacing: 0) {
             launchAtLoginMenu
+
+            Rectangle()
+                .fill(Color.white.opacity(0.10))
+                .frame(width: 1, height: 14)
+
             Button(action: model.quit) {
                 Image(systemName: "power")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Brand.secondaryText)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(FooterButtonStyle())
+            .buttonStyle(.plain)
             .help("Quit ccusage Bar")
             .keyboardShortcut("q", modifiers: .command)
         }
-        .padding(.horizontal, 16)
-        .frame(height: 50)
-        .background(Brand.canvas)
-        .overlay(alignment: .top) {
-            Rectangle().fill(Brand.border.opacity(0.75)).frame(height: 1)
-        }
+        .frostedGlassSurface(cornerRadius: 14)
     }
 
     private var launchAtLoginMenu: some View {
@@ -224,6 +258,8 @@ struct PopoverView: View {
             Image(systemName: "gearshape")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Brand.secondaryText)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -551,11 +587,7 @@ private struct MetricTiles: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(9)
-                .background(Brand.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Brand.border, lineWidth: 1)
-                }
+                .frostedCardSurface(cornerRadius: 10)
             }
         }
     }
@@ -720,28 +752,24 @@ private struct UsageChart: View {
 }
 
 private struct FooterButtonStyle: ButtonStyle {
+    let tint: Color?
+
+    init(tint: Color? = nil) {
+        self.tint = tint
+    }
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding(.horizontal, 10)
             .frame(height: 28)
-            .background(
-                configuration.isPressed ? Color.white.opacity(0.09) : Brand.surface,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Brand.border, lineWidth: 1)
-            }
+            .opacity(configuration.isPressed ? 0.70 : 1)
+            .frostedGlassSurface(cornerRadius: 14, tint: tint)
     }
 }
 
 private extension View {
     func cardStyle() -> some View {
-        background(Brand.surface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(Brand.border, lineWidth: 1)
-            }
+        frostedCardSurface(cornerRadius: 13)
     }
 }
 
