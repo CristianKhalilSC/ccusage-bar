@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import SwiftUI
 import ccusageCore
 import os
 
@@ -17,6 +18,18 @@ final class UsageAppModel: ObservableObject {
     @Published var state: LoadState = .loading
     @Published private(set) var launchAtLoginStatus: LaunchAtLoginStatus = .unavailable
     @Published var launchAtLoginErrorMessage: String?
+    @Published private(set) var selectedAccentColor: AccentColorOption? {
+        didSet {
+            guard selectedAccentColor != oldValue else { return }
+            preferences.accentColorName = selectedAccentColor?.rawValue ?? "custom"
+        }
+    }
+    @Published private(set) var customAccentColorComponents: AccentColorComponents {
+        didSet {
+            guard customAccentColorComponents != oldValue else { return }
+            preferences.customAccentColorHex = customAccentColorComponents.hex
+        }
+    }
     @Published var selectedAgent: String {
         didSet {
             guard selectedAgent != oldValue else { return }
@@ -40,7 +53,24 @@ final class UsageAppModel: ObservableObject {
         self.preferences = preferences
         self.launchAtLoginService = launchAtLoginService
         self.selectedAgent = preferences.selectedAgent
+        self.selectedAccentColor = preferences.accentColorName == "custom"
+            ? nil
+            : preferences.accentColorName.flatMap(AccentColorOption.init(rawValue:)) ?? .yellow
+        self.customAccentColorComponents = preferences.customAccentColorHex
+            .flatMap(AccentColorComponents.init(hex:)) ?? AccentColorOption.yellow.components
         self.launchAtLoginStatus = launchAtLoginService.status
+    }
+
+    var accentColor: Color {
+        selectedAccentColor?.color ?? customAccentColorComponents.color
+    }
+
+    var accentColorName: String {
+        selectedAccentColor?.name ?? "Custom"
+    }
+
+    var customAccentColor: Color {
+        customAccentColorComponents.color
     }
 
     var menuTitle: String {
@@ -129,6 +159,16 @@ final class UsageAppModel: ObservableObject {
             launchAtLoginErrorMessage = error.localizedDescription
         }
         refreshLaunchAtLoginStatus()
+    }
+
+    func selectAccentColor(_ option: AccentColorOption) {
+        selectedAccentColor = option
+    }
+
+    func setCustomAccentColor(_ color: Color) {
+        guard let components = AccentColorComponents(color: color) else { return }
+        customAccentColorComponents = components
+        selectedAccentColor = nil
     }
 
     func refreshLaunchAtLoginStatus() {

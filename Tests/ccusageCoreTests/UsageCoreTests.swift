@@ -15,6 +15,7 @@ struct UsageCoreTests {
         try tests.malformedFieldsDoNotCrashButMissingRecordsFail()
         try tests.agentOrderingPreservesSelectedAgent()
         try tests.selectedAgentDefaultsAndEmptyState()
+        try tests.accentColorPreferencePersists()
         try tests.resolverUsesPersistedPathThenPath()
         try await tests.serviceLoadsUsageThroughRunner()
         try await tests.serviceSkipsActiveBlockForCodex()
@@ -268,6 +269,24 @@ struct UsageCoreTests {
         try expect(snapshot.today.output == 0)
         try expect(snapshot.selectedAgent == "Ghost")
         try expect(AgentSelection.orderedAgents(detected: snapshot.detectedAgents, selected: "Ghost").contains("Ghost"))
+    }
+
+    func accentColorPreferencePersists() throws {
+        let suiteName = "com.cristiancruz.ccusagebar.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            throw TestFailure("could not create isolated user defaults")
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let preferences = UserDefaultsUsagePreferences(defaults: defaults)
+        try expect(preferences.accentColorName == nil)
+        try expect(preferences.customAccentColorHex == nil)
+
+        preferences.accentColorName = "custom"
+        preferences.customAccentColorHex = "#3366CC"
+        let reloadedPreferences = UserDefaultsUsagePreferences(defaults: defaults)
+        try expect(reloadedPreferences.accentColorName == "custom")
+        try expect(reloadedPreferences.customAccentColorHex == "#3366CC")
     }
 
     func resolverUsesPersistedPathThenPath() throws {

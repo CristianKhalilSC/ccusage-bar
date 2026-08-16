@@ -61,7 +61,7 @@ The app searches the current `PATH`, `/opt/homebrew/bin/ccusage`, and `/usr/loca
 
 Select the menu bar item to open the popover. Use the tabs to switch periods and the agent menu to focus on a specific source. The footer provides refresh, settings, and quit controls.
 
-To start ccusage Bar automatically, open the gear menu and enable **Launch at Login**. macOS may ask you to approve it under **System Settings → General → Login Items & Extensions**.
+Open the gear menu to choose an accent color or enable **Launch at Login**. macOS may ask you to approve the login item under **System Settings → General → Login Items & Extensions**.
 
 If the app cannot find `ccusage`, confirm that `ccusage --version` works in Terminal and that the executable is installed in one of the supported locations above.
 
