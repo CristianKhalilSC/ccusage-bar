@@ -2,7 +2,6 @@ import SwiftUI
 import ccusageCore
 
 private enum Brand {
-    static let yellow = Color(red: 238 / 255, green: 186 / 255, blue: 44 / 255)
     static let canvas = Color(red: 8 / 255, green: 8 / 255, blue: 8 / 255)
     static let surface = Color(red: 22 / 255, green: 22 / 255, blue: 22 / 255)
     static let raisedSurface = Color(red: 28 / 255, green: 28 / 255, blue: 28 / 255)
@@ -31,6 +30,8 @@ struct PopoverView: View {
         .fixedSize(horizontal: false, vertical: true)
         .background(Brand.canvas)
         .foregroundStyle(.white)
+        .tint(model.accentColor)
+        .environment(\.appAccentColor, model.accentColor)
         .preferredColorScheme(.dark)
         .background {
             GeometryReader { geometry in
@@ -65,7 +66,7 @@ struct PopoverView: View {
                     } label: {
                         Text(option.rawValue)
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(tab == option ? Brand.yellow : Brand.secondaryText)
+                            .foregroundStyle(tab == option ? model.accentColor : Brand.secondaryText)
                             .frame(maxWidth: .infinity)
                             .frame(height: 30)
                             .contentShape(Rectangle())
@@ -142,7 +143,7 @@ struct PopoverView: View {
             VStack(spacing: 12) {
                 ProgressView()
                     .controlSize(.small)
-                    .tint(Brand.yellow)
+                    .tint(model.accentColor)
                 Text("Reading usage")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Brand.secondaryText)
@@ -165,7 +166,7 @@ struct PopoverView: View {
             Button(action: model.refresh) {
                 Label("Refresh", systemImage: "arrow.clockwise")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Brand.yellow)
+                    .foregroundStyle(model.accentColor)
             }
             .buttonStyle(FooterButtonStyle())
             .keyboardShortcut("r", modifiers: .command)
@@ -191,6 +192,28 @@ struct PopoverView: View {
         Menu {
             Toggle("Launch at Login", isOn: launchAtLoginBinding)
                 .disabled(!model.launchAtLoginAvailable)
+            Divider()
+            Menu {
+                ForEach(AccentColorOption.allCases) { option in
+                    Toggle(isOn: accentColorBinding(for: option)) {
+                        Label {
+                            Text(option.name)
+                        } icon: {
+                            Image(nsImage: option.swatchImage)
+                        }
+                    }
+                }
+                Divider()
+                Button(action: showCustomAccentColorPicker) {
+                    Label {
+                        Text("Custom…")
+                    } icon: {
+                        Image(nsImage: model.customAccentColorComponents.swatchImage)
+                    }
+                }
+            } label: {
+                Label("Accent Color: \(model.accentColorName)", systemImage: "paintpalette")
+            }
             if model.launchAtLoginRequiresApproval {
                 Divider()
                 Button("Approve in System Settings...") {
@@ -215,6 +238,27 @@ struct PopoverView: View {
         )
     }
 
+    private func accentColorBinding(for option: AccentColorOption) -> Binding<Bool> {
+        Binding(
+            get: { model.selectedAccentColor == option },
+            set: { isSelected in
+                if isSelected {
+                    model.selectAccentColor(option)
+                }
+            }
+        )
+    }
+
+    private func showCustomAccentColorPicker() {
+        let initialColor = model.customAccentColor
+        model.setCustomAccentColor(initialColor)
+        DispatchQueue.main.async { [weak model] in
+            AccentColorPanelController.shared.show(color: initialColor) { [weak model] color in
+                model?.setCustomAccentColor(color)
+            }
+        }
+    }
+
     private var launchAtLoginErrorPresented: Binding<Bool> {
         Binding(
             get: { model.launchAtLoginErrorMessage != nil },
@@ -228,7 +272,7 @@ struct PopoverView: View {
 
     private var statusColor: Color {
         switch model.state {
-        case .loaded: Brand.yellow
+        case .loaded: model.accentColor
         case .loading: Brand.secondaryText
         case .unavailable, .failed: Color.orange
         }
@@ -251,6 +295,8 @@ enum UsageTab: String, CaseIterable, Identifiable {
 }
 
 private struct Wordmark: View {
+    @Environment(\.appAccentColor) private var accentColor
+
     var body: some View {
         HStack(alignment: .lastTextBaseline, spacing: 5) {
             Text("ccusage")
@@ -259,7 +305,7 @@ private struct Wordmark: View {
             Text("BAR")
                 .font(.system(size: 8, weight: .black, design: .rounded))
                 .tracking(0.5)
-                .foregroundStyle(Brand.yellow)
+                .foregroundStyle(accentColor)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("ccusage Bar")
@@ -322,6 +368,8 @@ private struct HeroCard: View {
 }
 
 private struct HeroValue: View {
+    @Environment(\.appAccentColor) private var accentColor
+
     let value: String
     let label: String
     let accent: Bool
@@ -331,7 +379,7 @@ private struct HeroValue: View {
             Text(value)
                 .font(.system(size: 29, weight: .bold, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(accent ? Brand.yellow : Color.white)
+                .foregroundStyle(accent ? accentColor : Color.white)
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
             Text(label)
@@ -344,6 +392,8 @@ private struct HeroValue: View {
 }
 
 private struct ActiveBlockCard: View {
+    @Environment(\.appAccentColor) private var accentColor
+
     let block: ActiveBlock
 
     private var stats: [(String, String)] {
@@ -359,7 +409,7 @@ private struct ActiveBlockCard: View {
         HStack(spacing: 12) {
             Image(systemName: "bolt.fill")
                 .font(.system(size: 11))
-                .foregroundStyle(Brand.yellow)
+                .foregroundStyle(accentColor)
             ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(stat.0)
@@ -374,20 +424,22 @@ private struct ActiveBlockCard: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 48)
-        .background(Brand.yellow.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Brand.yellow.opacity(0.18), lineWidth: 1)
+                .stroke(accentColor.opacity(0.18), lineWidth: 1)
         }
     }
 }
 
 private struct TokenCompositionCard: View {
+    @Environment(\.appAccentColor) private var accentColor
+
     let metrics: TokenMetrics
 
     private var segments: [TokenSegment] {
         [
-            TokenSegment(label: "Input", value: metrics.input, color: Brand.yellow),
+            TokenSegment(label: "Input", value: metrics.input, color: accentColor),
             TokenSegment(label: "Output", value: metrics.output, color: Color.white.opacity(0.25)),
             TokenSegment(label: "Cache read", value: metrics.cacheRead, color: Color.white.opacity(0.40)),
             TokenSegment(label: "Cache create", value: metrics.cacheCreate, color: Color.white.opacity(0.62))
@@ -467,6 +519,8 @@ private struct CompositionLegend: View {
 }
 
 private struct MetricTiles: View {
+    @Environment(\.appAccentColor) private var accentColor
+
     let metrics: TokenMetrics
 
     private var items: [MetricItem] {
@@ -484,7 +538,7 @@ private struct MetricTiles: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Image(systemName: item.icon)
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Brand.yellow)
+                        .foregroundStyle(accentColor)
                     Text(item.label)
                         .font(.system(size: 8, weight: .medium))
                         .foregroundStyle(Brand.secondaryText)
@@ -515,6 +569,8 @@ private struct MetricItem: Identifiable {
 }
 
 private struct ModelUsageCard: View {
+    @Environment(\.appAccentColor) private var accentColor
+
     let metrics: TokenMetrics
 
     private var rows: [ModelUsage] {
@@ -591,7 +647,7 @@ private struct ModelUsageCard: View {
 
     private func modelColor(_ index: Int) -> Color {
         switch index {
-        case 0: Brand.yellow
+        case 0: accentColor
         case 1: Color.white.opacity(0.62)
         case 2: Color.white.opacity(0.40)
         default: Color.white.opacity(0.24)
@@ -600,6 +656,8 @@ private struct ModelUsageCard: View {
 }
 
 private struct UsageChart: View {
+    @Environment(\.appAccentColor) private var accentColor
+
     let title: String
     let cost: Decimal
     let days: [DailyUsage]
@@ -613,13 +671,13 @@ private struct UsageChart: View {
                 Text(UsageFormatters.cost(cost))
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(Brand.yellow)
+                    .foregroundStyle(accentColor)
             }
             HStack(alignment: .bottom, spacing: days.count > 14 ? 2 : 8) {
                 ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
                     VStack(spacing: 5) {
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(index == days.count - 1 ? Brand.yellow : Color.white.opacity(0.20))
+                            .fill(index == days.count - 1 ? accentColor : Color.white.opacity(0.20))
                             .frame(height: max(4, CGFloat(day.metrics.output) / CGFloat(maxOutput) * 52))
                         Text(dayLabel(day.day, dense: days.count > 14))
                             .font(.system(size: days.count > 14 ? 6.5 : 8, weight: .medium))
@@ -688,12 +746,14 @@ private extension View {
 }
 
 private struct UnavailableView: View {
+    @Environment(\.appAccentColor) private var accentColor
+
     let retry: () -> Void
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: "terminal")
                 .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(Brand.yellow)
+                .foregroundStyle(accentColor)
             Text("ccusage unavailable").font(.system(size: 14, weight: .semibold))
             Text("Install ccusage or check your PATH, then retry.")
                 .font(.system(size: 11))

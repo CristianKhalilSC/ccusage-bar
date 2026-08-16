@@ -21,6 +21,16 @@ public final class UserDefaultsUsagePreferences: UsagePreferences {
         get { defaults.string(forKey: "resolvedCCUsagePath") }
         set { defaults.set(newValue, forKey: "resolvedCCUsagePath") }
     }
+
+    public var accentColorName: String? {
+        get { defaults.string(forKey: "accentColor") }
+        set { defaults.set(newValue, forKey: "accentColor") }
+    }
+
+    public var customAccentColorHex: String? {
+        get { defaults.string(forKey: "customAccentColor") }
+        set { defaults.set(newValue, forKey: "customAccentColor") }
+    }
 }
 
 public final class InMemoryUsagePreferences: UsagePreferences {
