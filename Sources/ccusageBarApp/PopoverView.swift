@@ -89,9 +89,15 @@ struct PopoverView: View {
 
     private var agentMenu: some View {
         Menu {
-            Picker("Agent", selection: $model.selectedAgent) {
-                ForEach(model.agentChoices, id: \.self) { agent in
-                    Text(agent).tag(agent)
+            ForEach(model.agentChoices, id: \.self) { agent in
+                Button {
+                    model.selectedAgent = agent
+                } label: {
+                    if model.selectedAgent == agent {
+                        Label(agentDisplayName(agent), systemImage: "checkmark")
+                    } else {
+                        Text(agentDisplayName(agent))
+                    }
                 }
             }
         } label: {
@@ -102,9 +108,13 @@ struct PopoverView: View {
         .fixedSize()
     }
 
+    private func agentDisplayName(_ agent: String) -> String {
+        agent == UsageAgent.all.rawValue ? "All agents" : agent
+    }
+
     private var agentMenuLabel: some View {
         HStack(spacing: 8) {
-            Text(model.selectedAgent == UsageAgent.all.rawValue ? "All agents" : model.selectedAgent)
+            Text(agentDisplayName(model.selectedAgent))
                 .lineLimit(1)
             Image(systemName: "chevron.down")
                 .font(.system(size: 9, weight: .bold))
